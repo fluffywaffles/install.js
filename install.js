@@ -16,8 +16,6 @@ var http      = require('http')
   , dest      = installjs + '/' + name
   , tarball   = tmp({ keep: true })
 
-  , config_   = process.argv[process.argv.length - 2] == 'config'
-
 // GENERAL
 function noop () {}
 
