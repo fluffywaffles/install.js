@@ -1,6 +1,6 @@
 {
   "name": "install.js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Globally install an npm package to a specific folder, then link it",
   "bin": "install.js",
   "scripts": {
