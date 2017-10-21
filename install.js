@@ -1,5 +1,5 @@
 #! /usr/bin/env node
-var http      = require('http')
+var https     = require('https')
   , fs        = require('fs')
   , path      = require('path')
   , exec      = require('child_process').exec
@@ -10,21 +10,19 @@ var http      = require('http')
   , targz     = require('tar.gz')
 
   , name      = process.argv[process.argv.length - 1]
-  , reg       = 'http://registry.npmjs.org'
+  , reg       = 'https://registry.npmjs.org'
   , tarurl    = ''
   , installjs = userhome('.install.js')
   , dest      = installjs + '/' + name
   , tarball   = tmp({ keep: true })
 
 // GENERAL
-function noop () {}
-
 function pr () {
   console.log.apply(console, arguments)
 }
 
 // EXEC util
-function handleExec (then) {
+function handleExec (then, talkative=false) {
   return function (error, stdout, stderr) {
     if (! error) {
       pr(chalk.white(' > Executing', chalk.dim.white('done')))
@@ -32,13 +30,16 @@ function handleExec (then) {
       then()
     } else {
       pr(chalk.red(' > exec apparent'), chalk.bold.inverse.red('FAIL'))
-      var printError = String(error)
-        .split('\n')
-        .map(function (line) {
-          return chalk.inverse.dim.red('   -->') + ' ' + line
-        })
-        .join('\n')
-      pr(chalk.dim.red(printError))
+      if (talkative) {
+        var printError = String(error)
+          .split('\n')
+          .slice(0, -1)
+          .map(function (line) {
+            return chalk.dim.red('   -->') + ' ' + line
+          })
+          .join('\n')
+        pr(chalk.red(printError))
+      }
       pr(chalk.yellow('Attempting to continue...'))
       then()
     }
@@ -46,10 +47,11 @@ function handleExec (then) {
 }
 
 function exc (cmd, where, then) {
-  if (!then) then = where, where = process.cwd
+  if (!then) then = where, where = process.cwd()
 
   pr()
   pr(' >', chalk.white('Executing', chalk.dim.white(cmd), 'at', chalk.dim.white(where) + '...'))
+  pr(' >', chalk.white('Then', chalk.dim.white(then)))
 
   var child = exec(cmd, { cwd: where, maxBuffer: 1024 * 1024 * 500 }, handleExec(then))
 
@@ -66,7 +68,7 @@ function exc (cmd, where, then) {
 
 // REQ util
 function breq (url, then) {
-  return http.get(url, function (res) {
+  return https.get(url, function (res) {
     if ( res.statusCode == 200 )
       then(res)
     else {
@@ -144,15 +146,10 @@ function npmln (done) {
 
 // npm takes care of this for you, but only sometimes
 // you just can't trust anybody
-function lnbin (done) {
-  var bin = require(dest + '/package.json').bin
-    , exists = fs.existsSync(lnk)
-
-  if (bin) {
-    var lnk  = path.join(dest, bin)
-
-    console.log(lnk)
-    debugger
+function lnbinHelper (bin) {
+  return function (done) {
+    var lnk    = path.join(dest, bin)
+      , exists = fs.existsSync(lnk)
 
     if (!exists) {
       exc('ln -s ' + lnk + ' ' + path.join('/usr/local/bin/', name), done)
@@ -160,6 +157,21 @@ function lnbin (done) {
         pr(chalk.gray('Bin already ln?'))
         done()
     }
+  }
+}
+
+function lnbin (done) {
+  var bin = require(dest + '/package.json').bin
+
+  if (bin) {
+    let bins = []
+    if (typeof bin === 'string') {
+      bins = [ bin ]
+    } else {
+      bins = Object.keys(bin)
+    }
+
+    chain(bins.map(lnbinHelper), done)
   } else {
     pr(chalk.gray('No bin to ln'))
     done()
@@ -172,9 +184,15 @@ function chain (fns, complete) {
 
   function done () {
     fin++
-    pr(chalk.dim.green(((fin / count)*100|0) + '%'))
-    if (fin != count)
+    if (fin != count) {
+      pr(chalk.green(((fin / count)*100|0) + '%'))
       next()
+    } else if (complete) {
+      pr(chalk.green('Done'))
+      pr(chalk.green('...'))
+      pr(chalk.green('💰 ?'))
+      complete()
+    }
   }
 
   function next () {
@@ -204,4 +222,3 @@ chain([
   npmln,
   lnbin
 ])
-
